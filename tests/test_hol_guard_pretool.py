@@ -129,7 +129,26 @@ def test_command_is_passed_as_one_argv_item(monkeypatch):
     monkeypatch.setattr(guard.subprocess, "run", fake_run)
     command = "echo $(touch /tmp/guard-argv-test)"
     assert guard.evaluate(_input(command)) == (True, "guard_allow")
-    assert seen["argv"] == ["hol-guard", "command", "test", command, "--json"]
+    assert seen["argv"] == ["hol-guard", "command", "test", "--json", "--", command]
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["-n", "--help", "printf 'first\\nsecond'", "echo 'quoted argument'"],
+)
+def test_option_like_and_multiline_commands_remain_positional(monkeypatch, command):
+    captured = []
+
+    def fake_run(argv, **kwargs):
+        captured.append(argv)
+        return _result({
+            "classification": {"explicitly_benign": True},
+            "minimum_action": "allow",
+        })
+
+    monkeypatch.setattr(guard.subprocess, "run", fake_run)
+    assert guard.evaluate(_input(command)) == (True, "guard_allow")
+    assert captured == [["hol-guard", "command", "test", "--json", "--", command]]
 
 
 def test_guard_runs_in_explicit_bash_cwd(monkeypatch, tmp_path):
