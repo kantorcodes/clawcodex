@@ -52,6 +52,29 @@ def test_implicit_allow_blocks(monkeypatch):
     assert guard.evaluate(_input()) == (False, "guard_block")
 
 
+@pytest.mark.parametrize(
+    "hook_output",
+    [
+        None,
+        {"permissionDecision": "allow"},
+        {"hookEventName": "PostToolUse", "permissionDecision": "allow"},
+        {"hookEventName": "PreToolUse", "permissionDecision": "deny"},
+    ],
+)
+def test_invalid_explicit_hook_envelopes_block(monkeypatch, hook_output):
+    payload = {
+        "classification": {"explicitly_benign": True},
+        "minimum_action": "allow",
+        "hookSpecificOutput": hook_output,
+    }
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *args, **kwargs: _result(payload),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_block")
+
+
 def test_review_blocks(monkeypatch):
     monkeypatch.setattr(
         guard.subprocess,
