@@ -331,7 +331,7 @@ def test_invalid_argv_nul_exits_with_blocking_code():
     """Actual hook process must exit with 2, not the nonblocking code 1."""
     result = subprocess.run(
         [sys.executable, str(Path(guard.__file__))],
-        input=json.dumps(_input("echo \\x00bad")),
+        input=json.dumps(_input("echo \x00bad")),
         capture_output=True,
         text=True,
         check=False,
