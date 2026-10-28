@@ -31,7 +31,7 @@ def _command_context(payload: Any) -> tuple[str, str | None] | None:
 def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
     try:
         result = subprocess.run(
-            ["hol-guard", "command", "test", command, "--json"],
+            ["hol-guard", "command", "test", "--json", "--", command],
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
