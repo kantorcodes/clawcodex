@@ -75,6 +75,33 @@ def test_invalid_explicit_hook_envelopes_block(monkeypatch, hook_output):
     assert guard.evaluate(_input()) == (False, "guard_block")
 
 
+@pytest.mark.parametrize("stop", [{"decision": None}, {"decision": []}, {"decision": "deny"}])
+def test_explicit_invalid_decision_fails_closed(monkeypatch, stop):
+    verdict = {
+        "classification": {"explicitly_benign": True},
+        "minimum_action": "allow",
+        **stop,
+    }
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *args, **kwargs: _result(verdict),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_block")
+
+
+def test_invalid_utf8_stdin_exits_with_blocking_code():
+    """Even malformed hook input must not exit with the nonblocking error code 1."""
+    result = subprocess.run(
+        [sys.executable, str(Path(guard.__file__))],
+        input=b"\\xff",
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == guard.BLOCK_EXIT
+    assert b"guard_invalid_input" in result.stderr
+
+
 def test_review_blocks(monkeypatch):
     monkeypatch.setattr(
         guard.subprocess,
