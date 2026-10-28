@@ -228,6 +228,32 @@ def test_persisted_bash_cwd_is_added_to_hook_input(tmp_path):
     assert prepared == {"command": "git status", "cwd": str(prior_cwd)}
 
 
+def test_null_bash_cwd_uses_persisted_context(tmp_path):
+    """Bash treats cwd=None as unspecified, so Guard must use the same cwd."""
+    workspace = tmp_path / "workspace"
+    persisted = workspace / "nested"
+    persisted.mkdir(parents=True)
+    context = SimpleNamespace(cwd=persisted, workspace_root=workspace)
+    tool = SimpleNamespace(name="Bash")
+    original = {"command": "git status", "cwd": None}
+
+    prepared = _prepare_pre_tool_hook_input(context, tool, original)
+
+    assert prepared == {"command": "git status", "cwd": str(persisted)}
+    assert original["cwd"] is None
+
+
+def test_null_bash_cwd_uses_workspace_root_without_persisted_cwd(tmp_path):
+    """The hook and Bash must agree when only workspace_root is available."""
+    context = SimpleNamespace(cwd=None, workspace_root=tmp_path)
+    tool = SimpleNamespace(name="Bash")
+    original = {"command": "git status", "cwd": None}
+
+    prepared = _prepare_pre_tool_hook_input(context, tool, original)
+
+    assert prepared == {"command": "git status", "cwd": str(tmp_path)}
+
+
 def test_explicit_bash_cwd_wins_over_persisted_context(tmp_path):
     workspace = tmp_path / "workspace"
     persisted = workspace / "persisted"
