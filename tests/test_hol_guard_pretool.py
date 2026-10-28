@@ -220,3 +220,27 @@ def test_invalid_utf8_guard_output_exits_with_blocking_code(tmp_path):
 
     assert result.returncode == guard.BLOCK_EXIT
     assert "guard_invalid_output" in result.stderr
+
+
+def test_invalid_subprocess_arguments_block(monkeypatch):
+    """A subprocess argument error must never allow the Bash tool to run."""
+    def raise_invalid_argv(*args, **kwargs):
+        raise ValueError("embedded null byte")
+
+    monkeypatch.setattr(guard.subprocess, "run", raise_invalid_argv)
+    assert guard.evaluate(_input("echo \\x00bad")) == (False, "guard_error")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX argv NUL validation")
+def test_invalid_argv_nul_exits_with_blocking_code():
+    """Actual hook process must exit with 2, not the nonblocking code 1."""
+    result = subprocess.run(
+        [sys.executable, str(Path(guard.__file__))],
+        input=json.dumps(_input("echo \\x00bad")),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == guard.BLOCK_EXIT
+    assert "guard_error" in result.stderr
