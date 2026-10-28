@@ -66,7 +66,7 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
     # Do not allow an explicitly stopped response to be overridden by it.
     decision = payload.get("decision")
     if ("continue" in payload and payload["continue"] is not True) or (
-        decision is not None
+        "decision" in payload
         and (not isinstance(decision, str) or decision.strip().lower() != "allow")
     ):
         return False, "guard_block"
@@ -96,7 +96,7 @@ def evaluate(payload: Any) -> tuple[bool, str]:
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, UnicodeError, OSError):
         print("guard_invalid_input", file=sys.stderr)
         return BLOCK_EXIT
 
