@@ -94,7 +94,7 @@ def test_invalid_utf8_stdin_exits_with_blocking_code():
     """Even malformed hook input must not exit with the nonblocking error code 1."""
     result = subprocess.run(
         [sys.executable, str(Path(guard.__file__))],
-        input=b"\\xff",
+        input=b"\xff",
         capture_output=True,
         check=False,
     )
