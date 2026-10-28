@@ -42,7 +42,8 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         return False, "guard_unavailable"
     except subprocess.TimeoutExpired:
         return False, "guard_timeout"
-    except OSError:
+    except (OSError, ValueError):
+        # Invalid argv (for example, a NUL in a command) must not fail open.
         return False, "guard_error"
     except UnicodeError:
         return False, "guard_invalid_output"
