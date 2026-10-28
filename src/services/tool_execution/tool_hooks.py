@@ -42,8 +42,10 @@ def _prepare_pre_tool_hook_input(
     processed_input: dict[str, Any],
 ) -> dict[str, Any]:
     """Give Bash pre-tool hooks the directory Bash will actually use."""
-    if tool.name != "Bash" or "cwd" in processed_input:
+    if tool.name != "Bash" or processed_input.get("cwd") is not None:
         return processed_input
+    # Bash treats an explicit cwd=None the same as a missing cwd: it uses
+    # context.cwd / workspace_root. The guard must inspect the same directory.
     effective_cwd = tool_use_context.cwd or tool_use_context.workspace_root
     if effective_cwd is None:
         return processed_input
