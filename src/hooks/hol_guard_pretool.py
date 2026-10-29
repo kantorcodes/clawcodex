@@ -105,7 +105,7 @@ def evaluate(payload: Any) -> tuple[bool, str]:
 
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
+        payload = json.load(sys.stdin, object_pairs_hook=_reject_duplicate_keys)
     except (json.JSONDecodeError, TypeError, ValueError, RecursionError, UnicodeError, OSError):
         print("guard_invalid_input", file=sys.stderr)
         return BLOCK_EXIT
