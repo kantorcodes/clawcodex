@@ -110,7 +110,13 @@ def main() -> int:
         print("guard_invalid_input", file=sys.stderr)
         return BLOCK_EXIT
 
-    allowed, reason = evaluate(payload)
+    try:
+        allowed, reason = evaluate(payload)
+    except Exception:
+        # The hook runner treats exit status 1 as nonblocking. Fail closed if
+        # an unexpected evaluation error escapes normal Guard error handling.
+        print("guard_error", file=sys.stderr)
+        return BLOCK_EXIT
     if allowed:
         return 0
     print(reason, file=sys.stderr)
