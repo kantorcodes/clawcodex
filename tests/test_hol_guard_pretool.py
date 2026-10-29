@@ -122,6 +122,24 @@ def test_malformed_output_blocks(monkeypatch):
     assert guard.evaluate(_input()) == (False, "guard_invalid_output")
 
 
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        '{"classification":{"explicitly_benign":true},"minimum_action":"deny","minimum_action":"allow"}',
+        '{"classification":{"explicitly_benign":false,"explicitly_benign":true},"minimum_action":"allow"}',
+        '{"classification":{"explicitly_benign":true},"continue":false,"continue":true,"minimum_action":"allow"}',
+    ],
+)
+def test_duplicate_guard_verdict_fields_fail_closed(monkeypatch, stdout):
+    """JSON duplicate keys must not override an explicit stop signal."""
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=stdout, stderr=""),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_invalid_output")
+
+
 def test_nonzero_guard_exit_blocks(monkeypatch):
     monkeypatch.setattr(
         guard.subprocess,
