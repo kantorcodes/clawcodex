@@ -468,3 +468,52 @@ def test_overlong_json_integer_exits_with_blocking_code():
     )
     assert result.returncode == guard.BLOCK_EXIT
     assert "guard_invalid_input" in result.stderr
+
+
+@pytest.mark.asyncio
+async def test_pre_tool_hook_executor_receives_actual_bash_working_directory(monkeypatch, tmp_path):
+    """PreToolUse must inspect the directory that Bash will actually run in."""
+    from src.hooks import hook_executor
+    from src.services.tool_execution.tool_hooks import run_pre_tool_use_hooks
+
+    workspace = tmp_path / "workspace"
+    persisted = workspace / "persisted"
+    explicit = workspace / "explicit"
+    persisted.mkdir(parents=True)
+    explicit.mkdir()
+    context = SimpleNamespace(
+        cwd=persisted,
+        workspace_root=workspace,
+        abort_controller=SimpleNamespace(signal=SimpleNamespace(aborted=False)),
+    )
+    tool = SimpleNamespace(name="Bash")
+    monkeypatch.setattr(hook_executor, "has_hook_for_event", lambda *_args: True)
+    observed = []
+
+    async def capture_pretool(tool_name, call_id, hook_input, hook_context):
+        assert tool_name == "Bash"
+        assert hook_context is context
+        observed.append(hook_input)
+        yield {}
+
+    monkeypatch.setattr(hook_executor, "execute_pre_tool_hooks", capture_pretool)
+
+    implicit_input = {"command": "git status"}
+    events = [
+        result async for result in run_pre_tool_use_hooks(
+            context, tool, implicit_input, "implicit-cwd",
+        )
+    ]
+    assert events == []
+    assert observed[-1]["cwd"] == str(persisted)
+    assert "cwd" not in implicit_input
+
+    explicit_input = {"command": "git status", "cwd": str(explicit)}
+    events = [
+        result async for result in run_pre_tool_use_hooks(
+            context, tool, explicit_input, "explicit-cwd",
+        )
+    ]
+    assert events == []
+    assert observed[-1]["cwd"] == str(explicit)
+    assert observed[-1] is explicit_input
