@@ -63,7 +63,7 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
 
     try:
         payload = json.loads(result.stdout, object_pairs_hook=_reject_duplicate_keys)
-    except (json.JSONDecodeError, TypeError, ValueError):
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
         return False, "guard_invalid_output"
 
     if not isinstance(payload, dict):
@@ -106,7 +106,7 @@ def evaluate(payload: Any) -> tuple[bool, str]:
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, TypeError, ValueError, UnicodeError, OSError):
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError, UnicodeError, OSError):
         print("guard_invalid_input", file=sys.stderr)
         return BLOCK_EXIT
 
