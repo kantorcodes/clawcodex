@@ -274,6 +274,7 @@ def test_guard_runs_in_explicit_bash_cwd(monkeypatch, tmp_path):
             {"classification": {"explicitly_benign": True}, "minimum_action": "allow"}
         )
 
+    monkeypatch.setattr(guard.shutil, "which", lambda _: "/__hol_guard_test__/bin/hol-guard")
     monkeypatch.setattr(guard.subprocess, "run", fake_run)
     assert guard.evaluate(_input(cwd=str(tmp_path))) == (True, "guard_allow")
     assert seen["cwd"] == str(tmp_path)
@@ -517,3 +518,33 @@ async def test_pre_tool_hook_executor_receives_actual_bash_working_directory(mon
     assert events == []
     assert observed[-1]["cwd"] == str(explicit)
     assert observed[-1] is explicit_input
+
+
+def test_relative_guard_path_cannot_change_binary_with_bash_cwd(monkeypatch, tmp_path):
+    """Resolve Guard in the hook's PATH context before changing into Bash cwd."""
+    relative_binary = "./bin/hol-guard"
+    expected_binary = os.path.realpath(relative_binary)
+    seen = {}
+
+    monkeypatch.setattr(guard.shutil, "which", lambda _: relative_binary)
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = argv
+        seen["cwd"] = kwargs["cwd"]
+        return _result(
+            {"classification": {"explicitly_benign": True}, "minimum_action": "allow"}
+        )
+
+    monkeypatch.setattr(guard.subprocess, "run", fake_run)
+    assert guard.evaluate(_input(cwd=str(tmp_path))) == (True, "guard_allow")
+    assert seen["argv"][0] == expected_binary
+    assert seen["cwd"] == str(tmp_path)
+
+
+def test_missing_guard_lookup_blocks_explicit_bash_cwd(monkeypatch, tmp_path):
+    monkeypatch.setattr(guard.shutil, "which", lambda _: None)
+    monkeypatch.setattr(
+        guard.subprocess, "run",
+        lambda *args, **kwargs: pytest.fail("Missing Guard binary must not launch"),
+    )
+    assert guard.evaluate(_input(cwd=str(tmp_path))) == (False, "guard_unavailable")
