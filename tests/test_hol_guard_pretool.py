@@ -382,3 +382,25 @@ async def test_hook_executor_blocks_guard_launch_and_decode_failures(
     assert (
         "guard_error" if failure == "not_executable" else "guard_invalid_output"
     ) in result.blocking_error
+
+def test_overlong_json_integer_exits_with_blocking_code():
+    """JSON integer conversion errors must deny, not exit with code 1."""
+    get_limit = getattr(sys, "get_int_max_str_digits", None)
+    if get_limit is None or get_limit() == 0:
+        pytest.skip("Python JSON integer digit limit is unavailable or disabled")
+
+    oversized_int = "9" * (get_limit() + 1)
+    payload = (
+        '{"hook_event":"PreToolUse","tool_name":"Bash",'
+        '"tool_input":{"command":"git status"},"oversized":'
+        + oversized_int + "}"
+    )
+    result = subprocess.run(
+        [sys.executable, str(Path(guard.__file__))],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == guard.BLOCK_EXIT
+    assert "guard_invalid_input" in result.stderr
