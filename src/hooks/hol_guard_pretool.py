@@ -8,6 +8,16 @@ from typing import Any
 BLOCK_EXIT = 2
 TIMEOUT_SECONDS = 10.0
 
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Do not let a later JSON member override an earlier Guard stop."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key in Guard verdict")
+        result[key] = value
+    return result
+
+
 
 def _command_context(payload: Any) -> tuple[str, str | None] | None:
     if not isinstance(payload, dict):
@@ -52,8 +62,8 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         return False, "guard_error"
 
     try:
-        payload = json.loads(result.stdout)
-    except (json.JSONDecodeError, TypeError):
+        payload = json.loads(result.stdout, object_pairs_hook=_reject_duplicate_keys)
+    except (json.JSONDecodeError, TypeError, ValueError):
         return False, "guard_invalid_output"
 
     if not isinstance(payload, dict):
