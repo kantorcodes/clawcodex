@@ -140,6 +140,30 @@ def test_duplicate_guard_verdict_fields_fail_closed(monkeypatch, stdout):
     assert guard.evaluate(_input()) == (False, "guard_invalid_output")
 
 
+def test_overdeep_guard_json_blocks(monkeypatch):
+    """RecursionError from JSON parsing must not turn into a nonblocking hook exit."""
+    nested = "[" * 20000 + "]" * 20000
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=nested, stderr=""),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_invalid_output")
+
+
+def test_overdeep_hook_input_exits_with_blocking_code():
+    nested = "[" * 20000 + "]" * 20000
+    result = subprocess.run(
+        [sys.executable, str(Path(guard.__file__))],
+        input=nested,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == guard.BLOCK_EXIT
+    assert "guard_invalid_input" in result.stderr
+
+
 def test_nonzero_guard_exit_blocks(monkeypatch):
     monkeypatch.setattr(
         guard.subprocess,
