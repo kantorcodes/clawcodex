@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import subprocess
@@ -100,6 +101,27 @@ def test_invalid_utf8_stdin_exits_with_blocking_code():
     )
     assert result.returncode == guard.BLOCK_EXIT
     assert b"guard_invalid_input" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "raw_input",
+    [
+        '{"hook_event":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status","command":"rm -rf build"}}',
+        '{"hook_event":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"},"tool_input":{"command":"rm -rf build"}}',
+        '{"hook_event":"PostToolUse","hook_event":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"}}',
+    ],
+)
+def test_duplicate_hook_input_fields_block_before_guard(monkeypatch, raw_input, capsys):
+    """Ambiguous hook input must not be inspected as a different command."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO(raw_input))
+    monkeypatch.setattr(
+        guard,
+        "_guard_allows",
+        lambda *_args, **_kwargs: pytest.fail("Guard must not inspect ambiguous input"),
+    )
+
+    assert guard.main() == guard.BLOCK_EXIT
+    assert "guard_invalid_input" in capsys.readouterr().err
 
 
 def test_review_blocks(monkeypatch):
