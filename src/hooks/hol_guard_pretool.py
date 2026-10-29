@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -39,9 +41,18 @@ def _command_context(payload: Any) -> tuple[str, str | None] | None:
 
 
 def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
+    # When Bash supplies a different working directory, resolve the Guard
+    # executable first. Relative PATH entries must not select a project-local
+    # binary after subprocess switches into that directory.
+    executable = "hol-guard"
+    if cwd is not None:
+        resolved = shutil.which(executable)
+        if not resolved:
+            return False, "guard_unavailable"
+        executable = os.path.realpath(resolved)
     try:
         result = subprocess.run(
-            ["hol-guard", "command", "test", "--json", "--", command],
+            [executable, "command", "test", "--json", "--", command],
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
