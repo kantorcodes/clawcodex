@@ -339,3 +339,46 @@ def test_invalid_argv_nul_exits_with_blocking_code():
 
     assert result.returncode == guard.BLOCK_EXIT
     assert "guard_error" in result.stderr
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixture semantics")
+@pytest.mark.parametrize("failure", ["not_executable", "invalid_utf8_output"])
+async def test_hook_executor_blocks_guard_launch_and_decode_failures(
+    tmp_path, monkeypatch, failure
+):
+    """The actual hook runner must receive a blocking result, not exit 1."""
+    import shlex
+
+    from src.hooks.hook_executor import _execute_command_hook
+    from src.hooks.hook_types import HookConfig
+
+    fake_guard = tmp_path / "hol-guard"
+    if failure == "not_executable":
+        fake_guard.write_text("#!/bin/sh\\nexit 0\\n")
+        fake_guard.chmod(0o644)
+    else:
+        fake_guard.write_text(
+            "#!/usr/bin/env python3\\n"
+            "import os\\n"
+            "os.write(1, b'\\\\xff')\\n"
+        )
+        fake_guard.chmod(0o755)
+
+    monkeypatch.setenv(
+        "PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+    hook = HookConfig(
+        type="command",
+        command=(
+            f"{shlex.quote(sys.executable)} "
+            f"{shlex.quote(str(Path(guard.__file__).resolve()))}"
+        ),
+    )
+    result = await _execute_command_hook(hook, _input())
+
+    assert result.exit_code == guard.BLOCK_EXIT
+    assert result.blocking_error is not None
+    assert (
+        "guard_error" if failure == "not_executable" else "guard_invalid_output"
+    ) in result.blocking_error
