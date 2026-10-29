@@ -355,13 +355,13 @@ async def test_hook_executor_blocks_guard_launch_and_decode_failures(
 
     fake_guard = tmp_path / "hol-guard"
     if failure == "not_executable":
-        fake_guard.write_text("#!/bin/sh\\nexit 0\\n")
+        fake_guard.write_text("#!/bin/sh\nexit 0\n")
         fake_guard.chmod(0o644)
     else:
         fake_guard.write_text(
-            "#!/usr/bin/env python3\\n"
-            "import os\\n"
-            "os.write(1, b'\\\\xff')\\n"
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "os.write(1, b'\\\xff')\n"
         )
         fake_guard.chmod(0o755)
 
