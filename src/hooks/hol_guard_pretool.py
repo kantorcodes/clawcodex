@@ -40,6 +40,20 @@ def _command_context(payload: Any) -> tuple[str, str | None] | None:
     return command, cwd
 
 
+def _worktree_root(cwd: str) -> str:
+    """Find the containing Git worktree without executing project code."""
+    start = os.path.realpath(cwd)
+    current = start
+    while True:
+        # Linked worktrees use a .git file rather than a directory.
+        if os.path.lexists(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return start
+        current = parent
+
+
 def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
     # When Bash supplies a different working directory, resolve the Guard
     # executable first. Relative PATH entries must not select a project-local
@@ -52,7 +66,7 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         executable = os.path.realpath(resolved)
         # An absolute PATH entry can still resolve to a binary planted inside
         # the agent workspace. Do not execute project-controlled Guard shims.
-        worktree = os.path.realpath(cwd)
+        worktree = _worktree_root(cwd)
         try:
             if os.path.commonpath((executable, worktree)) == worktree:
                 return False, "guard_untrusted_executable"
