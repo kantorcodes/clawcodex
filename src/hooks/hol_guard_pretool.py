@@ -35,7 +35,11 @@ def _command_context(payload: Any) -> tuple[str, str | None] | None:
     if not isinstance(command, str) or not command.strip():
         return None
     cwd = tool_input.get("cwd")
-    if cwd is not None and (not isinstance(cwd, str) or not cwd.strip()):
+    # A relative Bash cwd can resolve differently for the hook and the tool.
+    # Reject it instead of classifying a command in the wrong directory.
+    if cwd is not None and (
+        not isinstance(cwd, str) or not cwd.strip() or not os.path.isabs(cwd)
+    ):
         return None
     return command, cwd
 
