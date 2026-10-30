@@ -579,3 +579,26 @@ def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git
         "guard_untrusted_executable",
     )
 
+def test_guard_project_owned_symlink_cannot_launder_external_target(monkeypatch, tmp_path):
+    """A project-owned PATH link remains untrusted when it points outside Git."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".git").mkdir()
+    outside = tmp_path / "trusted-bin" / "hol-guard"
+    outside.parent.mkdir()
+    outside.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+    project_bin = project / ".bin"
+    project_bin.mkdir()
+    project_link = project_bin / "hol-guard"
+    try:
+        project_link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
+    monkeypatch.setattr(guard.shutil, "which", lambda _: str(project_link))
+    monkeypatch.setattr(
+        guard.subprocess, "run",
+        lambda *args, **kwargs: pytest.fail("untrusted Guard symlink must never launch"),
+    )
+    assert guard.evaluate(_input(cwd=str(project))) == (
+        False, "guard_untrusted_executable"
+    )
