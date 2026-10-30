@@ -50,6 +50,14 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         if not resolved:
             return False, "guard_unavailable"
         executable = os.path.realpath(resolved)
+        # An absolute PATH entry can still resolve to a binary planted inside
+        # the agent workspace. Do not execute project-controlled Guard shims.
+        worktree = os.path.realpath(cwd)
+        try:
+            if os.path.commonpath((executable, worktree)) == worktree:
+                return False, "guard_untrusted_executable"
+        except ValueError:
+            return False, "guard_untrusted_executable"
     try:
         result = subprocess.run(
             [executable, "command", "test", "--json", "--", command],
