@@ -66,6 +66,15 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
     # executable first. Relative PATH entries must not select a project-local
     # binary after subprocess switches into that directory.
     executable = "hol-guard"
+    # When Bash has no cwd override, the hook resolves a bare executable
+    # using PATH. Relative (including empty) entries can select a
+    # project-controlled hol-guard shim that forges an allow verdict.
+    # With an explicit cwd, the branch below freezes the executable path.
+    if cwd is None and any(
+        not os.path.isabs(entry)
+        for entry in os.environ.get("PATH", os.defpath).split(os.pathsep)
+    ):
+        return False, "guard_untrusted_executable"
     if cwd is not None:
         resolved = shutil.which(executable)
         if not resolved:
