@@ -12,6 +12,13 @@ from src.hooks import hol_guard_pretool as guard
 from src.services.tool_execution.tool_hooks import _prepare_pre_tool_hook_input
 
 
+@pytest.fixture(autouse=True)
+def _trusted_guard_lookup_for_focused_tests(monkeypatch):
+    # Production looks up the real Guard binary. Synthetic output tests use a
+    # fixed executable path outside any project worktree.
+    monkeypatch.setattr(guard.shutil, "which", lambda _: "/__hol_guard_test__/bin/hol-guard")
+
+
 def _input(
     command: object = "git status",
     *,
@@ -259,7 +266,7 @@ def test_command_is_passed_as_one_argv_item(monkeypatch):
     monkeypatch.setattr(guard.subprocess, "run", fake_run)
     command = "echo $(touch /tmp/guard-argv-test)"
     assert guard.evaluate(_input(command)) == (True, "guard_allow")
-    assert seen["argv"] == ["hol-guard", "command", "test", "--json", "--", command]
+    assert seen["argv"] == ["/__hol_guard_test__/bin/hol-guard", "command", "test", "--json", "--", command]
 
 
 @pytest.mark.parametrize(
@@ -278,7 +285,7 @@ def test_option_like_and_multiline_commands_remain_positional(monkeypatch, comma
 
     monkeypatch.setattr(guard.subprocess, "run", fake_run)
     assert guard.evaluate(_input(command)) == (True, "guard_allow")
-    assert captured == [["hol-guard", "command", "test", "--json", "--", command]]
+    assert captured == [["/__hol_guard_test__/bin/hol-guard", "command", "test", "--json", "--", command]]
 
 
 def test_guard_runs_in_explicit_bash_cwd(monkeypatch, tmp_path):
@@ -370,7 +377,7 @@ def test_non_executable_guard_exits_with_blocking_code(tmp_path):
     )
 
     assert result.returncode == guard.BLOCK_EXIT
-    assert "guard_error" in result.stderr
+    assert "guard_unavailable" in result.stderr
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable script fixture")
@@ -408,19 +415,24 @@ def test_invalid_subprocess_arguments_block(monkeypatch):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX argv NUL validation")
-def test_invalid_argv_nul_exits_with_blocking_code():
+def test_invalid_argv_nul_exits_with_blocking_code(tmp_path):
     """Actual hook process must exit with 2, not the nonblocking code 1."""
+    guard_bin = tmp_path / "hol-guard"
+    guard_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    guard_bin.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}{os.pathsep}{env.get('PATH', '')}"
     result = subprocess.run(
         [sys.executable, str(Path(guard.__file__))],
         input=json.dumps(_input("echo \x00bad")),
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
 
     assert result.returncode == guard.BLOCK_EXIT
     assert "guard_error" in result.stderr
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixture semantics")
@@ -461,7 +473,7 @@ async def test_hook_executor_blocks_guard_launch_and_decode_failures(
     assert result.exit_code == guard.BLOCK_EXIT
     assert result.blocking_error is not None
     assert (
-        "guard_error" if failure == "not_executable" else "guard_invalid_output"
+        "guard_unavailable" if failure == "not_executable" else "guard_invalid_output"
     ) in result.blocking_error
 
 def test_overlong_json_integer_exits_with_blocking_code():
@@ -565,6 +577,31 @@ def test_implicit_bash_cwd_rejects_relative_path_entries(monkeypatch, path_entry
         guard.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("Relative PATH must not execute Guard"),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_untrusted_executable")
+
+
+@pytest.mark.parametrize("link_to_outside", [False, True])
+def test_implicit_bash_cwd_rejects_absolute_worktree_guard(monkeypatch, tmp_path, link_to_outside):
+    """No implicit-cwd Guard evaluation may launch a repo-controlled shim."""
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".git").mkdir()
+    local_bin = project / "bin"
+    local_bin.mkdir()
+    selected = local_bin / "hol-guard"
+    if link_to_outside:
+        outside = tmp_path / "trusted-guard"
+        outside.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        selected.symlink_to(outside)
+    else:
+        selected.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("PATH", str(local_bin))
+    monkeypatch.setattr(guard.shutil, "which", lambda _: str(selected))
+    monkeypatch.setattr(
+        guard.subprocess, "run",
+        lambda *_args, **_kwargs: pytest.fail("untrusted Guard binary must not run"),
     )
     assert guard.evaluate(_input()) == (False, "guard_untrusted_executable")
 
