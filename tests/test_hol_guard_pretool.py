@@ -548,3 +548,31 @@ def test_missing_guard_lookup_blocks_explicit_bash_cwd(monkeypatch, tmp_path):
         lambda *args, **kwargs: pytest.fail("Missing Guard binary must not launch"),
     )
     assert guard.evaluate(_input(cwd=str(tmp_path))) == (False, "guard_unavailable")
+
+@pytest.mark.parametrize("git_marker", ["directory", "file"])
+def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git_marker):
+    """The Guard shim cannot hide at the Git root when Bash runs in a child."""
+    workspace = tmp_path / "workspace"
+    nested = workspace / "src" / "nested"
+    project_guard = workspace / "node_modules" / ".bin" / "hol-guard"
+    nested.mkdir(parents=True)
+    project_guard.parent.mkdir(parents=True)
+    project_guard.write_text("#!/bin/sh\\nexit 0\\n")
+    marker = workspace / ".git"
+    if git_marker == "directory":
+        marker.mkdir()
+    else:
+        # Linked Git worktrees identify their root with a .git file.
+        marker.write_text("gitdir: /does/not/need/to/exist\\n")
+
+    monkeypatch.setattr(guard.shutil, "which", lambda _name: str(project_guard))
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("Never execute a project Guard shim"),
+    )
+    assert guard.evaluate(_input(cwd=str(nested))) == (
+        False,
+        "guard_untrusted_executable",
+    )
+
