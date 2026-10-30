@@ -550,7 +550,8 @@ def test_missing_guard_lookup_blocks_explicit_bash_cwd(monkeypatch, tmp_path):
     assert guard.evaluate(_input(cwd=str(tmp_path))) == (False, "guard_unavailable")
 
 @pytest.mark.parametrize("git_marker", ["directory", "file"])
-def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git_marker):
+@pytest.mark.parametrize("spoofed_nested_git", [False, True])
+def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git_marker, spoofed_nested_git):
     """The Guard shim cannot hide at the Git root when Bash runs in a child."""
     workspace = tmp_path / "workspace"
     nested = workspace / "src" / "nested"
@@ -558,6 +559,8 @@ def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git
     nested.mkdir(parents=True)
     project_guard.parent.mkdir(parents=True)
     project_guard.write_text("#!/bin/sh\\nexit 0\\n")
+    if spoofed_nested_git:
+        (nested / ".git").write_text("fake nested marker")
     marker = workspace / ".git"
     if git_marker == "directory":
         marker.mkdir()
