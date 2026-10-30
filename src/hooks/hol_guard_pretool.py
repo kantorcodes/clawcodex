@@ -120,6 +120,10 @@ def main() -> int:
     except (json.JSONDecodeError, TypeError, ValueError, RecursionError, UnicodeError, OSError):
         print("guard_invalid_input", file=sys.stderr)
         return BLOCK_EXIT
+    except Exception:
+        # Unknown parser failures must also block: hook runner exit 1 is nonblocking.
+        print("guard_invalid_input", file=sys.stderr)
+        return BLOCK_EXIT
 
     try:
         allowed, reason = evaluate(payload)
