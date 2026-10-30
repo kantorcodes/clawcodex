@@ -66,12 +66,16 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         resolved = shutil.which(executable)
         if not resolved:
             return False, "guard_unavailable"
-        executable = os.path.realpath(resolved)
-        # An absolute PATH entry can still resolve to a binary planted inside
-        # the agent workspace. Do not execute project-controlled Guard shims.
+        selected_executable = os.path.abspath(resolved)
+        executable = os.path.realpath(selected_executable)
+        # Check the selected path as well as its target. A symlink under the
+        # worktree must not launder a project-controlled executable lookup.
         worktree = _worktree_root(cwd)
         try:
-            if os.path.commonpath((executable, worktree)) == worktree:
+            if any(
+                os.path.commonpath((candidate, worktree)) == worktree
+                for candidate in (selected_executable, executable)
+            ):
                 return False, "guard_untrusted_executable"
         except ValueError:
             return False, "guard_untrusted_executable"
