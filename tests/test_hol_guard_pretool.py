@@ -231,6 +231,22 @@ def test_missing_command_blocks():
     assert guard.evaluate(_input(None)) == (False, "guard_invalid_input")
 
 
+@pytest.mark.parametrize("cwd", [".", "./project", "../other", "src/tools", ""])
+def test_relative_bash_cwd_blocks_before_inspection(monkeypatch, cwd):
+    """A relative cwd must not classify a different checkout than Bash executes."""
+    monkeypatch.setattr(
+        guard,
+        "_guard_allows",
+        lambda *_args, **_kwargs: pytest.fail(
+            "Guard must not inspect a command with ambiguous relative cwd"
+        ),
+    )
+    payload = _input()
+    payload["tool_input"]["cwd"] = cwd
+
+    assert guard.evaluate(payload) == (False, "guard_invalid_input")
+
+
 def test_command_is_passed_as_one_argv_item(monkeypatch):
     seen = {}
 
