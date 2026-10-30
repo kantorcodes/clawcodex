@@ -558,7 +558,7 @@ def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git
     project_guard = workspace / "node_modules" / ".bin" / "hol-guard"
     nested.mkdir(parents=True)
     project_guard.parent.mkdir(parents=True)
-    project_guard.write_text("#!/bin/sh\\nexit 0\\n")
+    project_guard.write_text("#!/bin/sh\nexit 0\n")
     if spoofed_nested_git:
         (nested / ".git").write_text("fake nested marker")
     marker = workspace / ".git"
@@ -566,7 +566,7 @@ def test_nested_bash_cwd_rejects_project_guard_binary(monkeypatch, tmp_path, git
         marker.mkdir()
     else:
         # Linked Git worktrees identify their root with a .git file.
-        marker.write_text("gitdir: /does/not/need/to/exist\\n")
+        marker.write_text("gitdir: /does/not/need/to/exist\n")
 
     monkeypatch.setattr(guard.shutil, "which", lambda _name: str(project_guard))
     monkeypatch.setattr(
