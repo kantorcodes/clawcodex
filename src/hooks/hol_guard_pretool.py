@@ -83,11 +83,15 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         return False, "guard_unavailable"
     selected_executable = os.path.abspath(resolved)
     executable = os.path.realpath(selected_executable)
-    # Check the lookup alias AND symlink target against the outermost Git root.
-    worktree = _worktree_root(cwd or os.getcwd())
+    # Check both the hook launch checkout and Bash's eventual checkout.
+    # An explicit Bash cwd can point elsewhere while PATH still selects a
+    # repository-controlled Guard shim from the original launch checkout.
+    # Check the lookup alias as well as its resolved symlink target.
+    worktrees = {_worktree_root(os.getcwd()), _worktree_root(cwd or os.getcwd())}
     try:
         if any(
             os.path.commonpath((candidate, worktree)) == worktree
+            for worktree in worktrees
             for candidate in (selected_executable, executable)
         ):
             return False, "guard_untrusted_executable"
