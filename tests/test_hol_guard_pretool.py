@@ -549,24 +549,20 @@ async def test_pre_tool_hook_executor_receives_actual_bash_working_directory(mon
 
 
 def test_relative_guard_path_cannot_change_binary_with_bash_cwd(monkeypatch, tmp_path):
-    """Resolve Guard in the hook's PATH context before changing into Bash cwd."""
-    relative_binary = "./bin/hol-guard"
-    expected_binary = os.path.realpath(relative_binary)
-    seen = {}
-
-    monkeypatch.setattr(guard.shutil, "which", lambda _: relative_binary)
-
-    def fake_run(argv, **kwargs):
-        seen["argv"] = argv
-        seen["cwd"] = kwargs["cwd"]
-        return _result(
-            {"classification": {"explicitly_benign": True}, "minimum_action": "allow"}
-        )
-
-    monkeypatch.setattr(guard.subprocess, "run", fake_run)
-    assert guard.evaluate(_input(cwd=str(tmp_path))) == (True, "guard_allow")
-    assert seen["argv"][0] == expected_binary
-    assert seen["cwd"] == str(tmp_path)
+    """A relative PATH shim under the launch directory cannot forge a Guard allow."""
+    launcher = tmp_path / "launcher"
+    launcher.mkdir()
+    bash_cwd = tmp_path / "bash"
+    bash_cwd.mkdir()
+    monkeypatch.chdir(launcher)
+    monkeypatch.setattr(guard.shutil, "which", lambda _: "./bin/hol-guard")
+    monkeypatch.setattr(
+        guard.subprocess, "run",
+        lambda *_args, **_kwargs: pytest.fail("untrusted local Guard shim must not run"),
+    )
+    assert guard.evaluate(_input(cwd=str(bash_cwd))) == (
+        False, "guard_untrusted_executable"
+    )
 
 
 @pytest.mark.parametrize("path_entry", [".", "", "bin", "../shims"])
@@ -667,3 +663,63 @@ def test_guard_project_owned_symlink_cannot_launder_external_target(monkeypatch,
     assert guard.evaluate(_input(cwd=str(project))) == (
         False, "guard_untrusted_executable"
     )
+
+
+@pytest.mark.parametrize("symlinked", [False, True])
+def test_explicit_bash_cwd_rejects_guard_from_launcher_repo(monkeypatch, tmp_path, symlinked):
+    """The hook launcher repo must not supply a fake Guard for another Bash cwd."""
+    launcher = tmp_path / "launcher"
+    launcher.mkdir()
+    (launcher / ".git").mkdir()
+    selected = launcher / ".bin" / "hol-guard"
+    selected.parent.mkdir()
+    if symlinked:
+        target = tmp_path / "trusted" / "hol-guard"
+        target.parent.mkdir()
+        target.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+        try:
+            selected.symlink_to(target)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation is unavailable")
+    else:
+        selected.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+    bash_cwd = tmp_path / "other-checkout"
+    bash_cwd.mkdir()
+    (bash_cwd / ".git").mkdir()
+    monkeypatch.chdir(launcher)
+    monkeypatch.setattr(guard.shutil, "which", lambda _: str(selected))
+    monkeypatch.setattr(
+        guard.subprocess, "run",
+        lambda *_args, **_kwargs: pytest.fail("launch-checkout shim must not execute"),
+    )
+    assert guard.evaluate(_input(cwd=str(bash_cwd))) == (
+        False, "guard_untrusted_executable"
+    )
+
+
+def test_explicit_bash_cwd_allows_trusted_external_guard(monkeypatch, tmp_path):
+    """An external Guard install stays usable across independent checkouts."""
+    launcher = tmp_path / "launcher"
+    launcher.mkdir()
+    (launcher / ".git").mkdir()
+    bash_cwd = tmp_path / "bash"
+    bash_cwd.mkdir()
+    (bash_cwd / ".git").mkdir()
+    trusted_bin = tmp_path / "trusted" / "hol-guard"
+    trusted_bin.parent.mkdir()
+    trusted_bin.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+    monkeypatch.chdir(launcher)
+    monkeypatch.setattr(guard.shutil, "which", lambda _: str(trusted_bin))
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = argv
+        seen["cwd"] = kwargs["cwd"]
+        return _result(
+            {"classification": {"explicitly_benign": True}, "minimum_action": "allow"}
+        )
+
+    monkeypatch.setattr(guard.subprocess, "run", fake_run)
+    assert guard.evaluate(_input(cwd=str(bash_cwd))) == (True, "guard_allow")
+    assert seen["argv"][0] == str(trusted_bin)
+    assert seen["cwd"] == str(bash_cwd)
