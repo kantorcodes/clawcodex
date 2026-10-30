@@ -557,6 +557,18 @@ def test_relative_guard_path_cannot_change_binary_with_bash_cwd(monkeypatch, tmp
     assert seen["cwd"] == str(tmp_path)
 
 
+@pytest.mark.parametrize("path_entry", [".", "", "bin", "../shims"])
+def test_implicit_bash_cwd_rejects_relative_path_entries(monkeypatch, path_entry):
+    """A bare Guard executable must not be selected from a local PATH shim."""
+    monkeypatch.setenv("PATH", f"{path_entry}{os.pathsep}/usr/bin")
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("Relative PATH must not execute Guard"),
+    )
+    assert guard.evaluate(_input()) == (False, "guard_untrusted_executable")
+
+
 def test_missing_guard_lookup_blocks_explicit_bash_cwd(monkeypatch, tmp_path):
     monkeypatch.setattr(guard.shutil, "which", lambda _: None)
     monkeypatch.setattr(
