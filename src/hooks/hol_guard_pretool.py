@@ -75,23 +75,24 @@ def _guard_allows(command: str, cwd: str | None = None) -> tuple[bool, str]:
         for entry in os.environ.get("PATH", os.defpath).split(os.pathsep)
     ):
         return False, "guard_untrusted_executable"
-    if cwd is not None:
-        resolved = shutil.which(executable)
-        if not resolved:
-            return False, "guard_unavailable"
-        selected_executable = os.path.abspath(resolved)
-        executable = os.path.realpath(selected_executable)
-        # Check the selected path as well as its target. A symlink under the
-        # worktree must not launder a project-controlled executable lookup.
-        worktree = _worktree_root(cwd)
-        try:
-            if any(
-                os.path.commonpath((candidate, worktree)) == worktree
-                for candidate in (selected_executable, executable)
-            ):
-                return False, "guard_untrusted_executable"
-        except ValueError:
+    # Bind the CLI executable to a verified absolute path even when Bash has
+    # no explicit cwd. An absolute project-owned PATH directory can otherwise
+    # forge Guard's allow verdict in the current working directory.
+    resolved = shutil.which(executable)
+    if not resolved:
+        return False, "guard_unavailable"
+    selected_executable = os.path.abspath(resolved)
+    executable = os.path.realpath(selected_executable)
+    # Check the lookup alias AND symlink target against the outermost Git root.
+    worktree = _worktree_root(cwd or os.getcwd())
+    try:
+        if any(
+            os.path.commonpath((candidate, worktree)) == worktree
+            for candidate in (selected_executable, executable)
+        ):
             return False, "guard_untrusted_executable"
+    except ValueError:
+        return False, "guard_untrusted_executable"
     try:
         result = subprocess.run(
             [executable, "command", "test", "--json", "--", command],
