@@ -41,16 +41,19 @@ def _command_context(payload: Any) -> tuple[str, str | None] | None:
 
 
 def _worktree_root(cwd: str) -> str:
-    """Find the containing Git worktree without executing project code."""
+    """Find the outer Git worktree root without executing project code."""
     start = os.path.realpath(cwd)
     current = start
+    root = start
     while True:
+        # A nested directory can contain a project-controlled fake .git file.
+        # Use the outermost repository marker, not the first one found.
         # Linked worktrees use a .git file rather than a directory.
         if os.path.lexists(os.path.join(current, ".git")):
-            return current
+            root = current
         parent = os.path.dirname(current)
         if parent == current:
-            return start
+            return root
         current = parent
 
 
